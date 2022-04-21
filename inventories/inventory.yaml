@@ -1,0 +1,21 @@
+all:
+  hosts:
+  children:
+    wintest:
+      hosts:
+        10.105.136.129:
+        10.105.136.130:
+        10.105.136.131:
+        10.105.136.132:
+      vars:
+        ansible_connection: winrm
+        ansible_winrm_server_cert_validation: ignore
+        ansible_winrm_transport: credssp 
+    ansible:
+      hosts:
+        10.112.72.73:
+        10.105.136.107:
+    test:
+      hosts:
+        10.105.136.133:
+        10.105.136.134:

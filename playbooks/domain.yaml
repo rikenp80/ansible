@@ -1,0 +1,32 @@
+---
+- hosts: sqlserver
+  vars_prompt:
+    - name: username
+      prompt: "enter the username (example gmartinez@testad.aspect-cloud.net)"
+      private: no
+    - name: password
+      prompt: "enter password" 
+  tasks:
+#    - name: Install updates
+#      win_updates:
+#        reboot: yes
+#        reboot_timeout: 3600
+#        log_path: C:\ansible_wu.txt
+    - name: Set multiple lookup addresses on all visible adapters (usually physical adapters that are in the Up state), with debug logging to a file
+      win_dns_client:
+        adapter_names: '*'
+        ipv4_addresses:
+        - 10.105.136.135
+        - 10.105.148.2
+    - win_domain_membership:
+        dns_domain_name: testad.aspect-cloud.net
+#        hostname: "{{ hostvars['ansible_hostname']  }}"
+        domain_admin_user: "{{ username }}"
+        domain_admin_password: "{{ password }}"
+#        domain_ou_path: "OU=Windows,OU=Servers,DC=testad,DC=aspect-cloud, DC=net"
+        state: domain
+      register: domain_state
+    - win_reboot:
+      when: domain_state.reboot_required
+    - win_timezone:
+        timezone: UTC

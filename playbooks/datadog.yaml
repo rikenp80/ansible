@@ -1,0 +1,15 @@
+---
+- name: install datadog
+  hosts: wintest
+  become: yes
+  become_user: administrator
+  roles:
+    - role: '/etc/ansible/roles/datadog.datadog'
+  vars:
+    datadog_api_key: "dd605d1d620eb2fb227812efe05cb44d"
+    datadog_config:
+      process_config:
+        enabled: "true"
+      tags: "team:cdo, env:dev"
+      log_level: INFO
+    datadog_enabled: "True"

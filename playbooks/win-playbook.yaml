@@ -1,0 +1,17 @@
+---
+# Who Am I and setup
+- name: verify user
+  hosts: wintest
+  tasks:
+    - win_whoami:
+      become: yes
+      become_method: enable
+      register: whoami
+    - debug:
+        var: whoami
+    - setup:
+      become: yes
+      become_method: enable
+      register: setup
+    - debug:
+        var: setup

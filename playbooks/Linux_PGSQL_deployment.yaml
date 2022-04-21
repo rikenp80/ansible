@@ -1,0 +1,75 @@
+---
+- hosts: Linux
+
+  tasks:
+    - name: Execute commands to recan the disks when a fresh server comes with disk attached.
+      become: true
+      become_user: root
+      shell: echo "- - -" >  /sys/class/scsi_host/host0/scan ; echo "- - -" >  /sys/class/scsi_host/host1/scan ; echo "- - -" >  /sys/class/scsi_host/host3/scan
+      tags:
+        - scan
+
+    - name: Create a new primary partition with a size of requirement
+      parted:
+        device: /dev/sdb
+        number: 1
+        state: present
+        part_end: 90GiB
+      tags:
+        - PP
+
+
+    - name: Create a ext4 filesystem on /dev/sdb1
+      filesystem:
+        fstype: ext4
+        dev: /dev/sdb1
+      tags:
+        - Format
+
+    - name: Create a directory if it does not exist
+      file:
+        path: /var/lib/pgsql
+        state: directory
+        mode: '0755'
+      tags:
+        - Folder
+
+
+    - name: Mount
+      become: true
+      become_user: root
+      shell: mount /dev/sdb1 /var/lib/pgsql
+      tags:
+        - scan
+
+    - name: Add a line to a file if the file does not exist in fstab.
+      lineinfile:
+        path: /etc/fstab
+        line: /dev/sdb1 /var/lib/pgsql ext4 defaults        0 0
+        create: yes
+      tags:
+        - fstab
+
+    - name: postgresql-12 installation.
+      become: true
+      become_user: root
+      shell: dnf -y install https://download.postgresql.org/pub/repos/yum/reporpms/EL-8-x86_64/pgdg-redhat-repo-latest.noarch.rpm ; dnf -qy module disable postgresql ; dnf -y install postgresql12-server postgresql12-contrib ; /usr/pgsql-12/bin/postgresql-12-setup initdb
+      tags:
+        - pgsql
+
+    - name: postgresql-12 service restart.
+      become: true
+      become_user: root
+      shell: systemctl restart postgresql-12.service ; systemctl enable postgresql-12.service
+      tags:
+        - pgsqlservice
+
+
+
+    - name: Stopping and disabling firewall
+      become: true
+      become_user: root
+      shell: systemctl stop firewalld ; systemctl disable firewalld
+      tags:
+        - FW
+

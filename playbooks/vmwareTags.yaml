@@ -1,0 +1,94 @@
+---
+- name: Add tags ta a virtual machine
+  hosts: localhost
+  vars_files:
+    - /root/hostsvar.yaml
+  tasks:
+    - name: create category
+      vmware_category:
+        hostname: '{{ vcenter_hostname }}'
+        username: '{{ vcenter_username }}'
+        password: '{{ vcenter_password }}'
+        validate_certs: no
+        category_name: team
+        category_description: This is to describe the team that owns the VM
+        category_cardinality: 'multiple'
+        state: present
+    - name: get cat facts
+      vmware_category_facts:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+      delegate_to: localhost
+      register: tag_team_results
+    - name: Debug tag facts
+      debug: var=tag_team_results
+    - name: grab cat id
+      set_fact:
+        category_id: "{{ item.category_id }}"
+      loop: "{{ tag_team_results.tag_category_facts|json_query(query) }}"
+      vars:
+        query: "[?category_name==`team`]"
+    - name: Debug category_id
+      debug: var=category_id
+    - name: Create team:cdo tag
+      vmware_tag:
+        hostname: '{{ vcenter_hostname }}'
+        username: '{{ vcenter_username }}'
+        password: '{{ vcenter_password }}'
+        validate_certs: no
+        category_id: "{{ category_id }}"
+        tag_name: cdo
+        tag_description: Servers that belong to Cloud Database Operations
+        state: present
+      delegate_to: localhost
+    - name: add tag
+      vmware_tag_manager:
+        hostname: '{{ vcenter_hostname }}'
+        username: '{{ vcenter_username }}'
+        password: '{{ vcenter_password }}'
+        validate_certs: no
+        tag_names:
+          - team:cdo
+        object_name: '{{ item }}'
+        object_type: VirtualMachine
+        state: add
+      delegate_to: localhost
+      with_items:
+        - agero-ccdb1.ash.aspect-cloud.net
+        - agero-md1.ash.aspect-cloud.net
+        - cassandra1.ash.aspect-cloud.net
+        - cassandra2.ash.aspect-cloud.net
+        - ccdb1.ash.aspect-cloud.net
+        - ccdb18.ash.aspect-cloud.net
+        - cxpreport2.ash.aspect-cloud.net
+        #- dbadmin.ash.aspect-cloud.net
+        #- dbadmin.ash.aspect-cloud.net
+        - infostore2.ash.aspect-cloud.net
+        - pdb-db-quorum.ash.aspect-cloud.net
+        - pdb4.ash.aspect-cloud.net
+    - name: get facts from VM
+      vmware_guest_facts:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        name: "cxpreport2.ash.aspect-cloud.net"
+        datacenter: "ASH"
+        tags: yes
+      delegate_to: localhost
+      register: facts
+    - name: debug facts
+      debug: var=facts
+    - name: Gather only registered virtual machines
+      vmware_vm_facts:
+        hostname: '{{ vcenter_hostname }}'
+        username: '{{ vcenter_username }}'
+        password: '{{ vcenter_password }}'
+        vm_type: vm
+      delegate_to: localhost
+      register: vm_facts
+    - name: debug vm_facts
+      debug:
+        var: vm_facts

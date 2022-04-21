@@ -1,0 +1,188 @@
+---
+- hosts: SQLSERVER
+  vars:
+    Source_folder: /Users/akorribelly/Desktop/Powershell
+    destination_folder: c:\
+    ManagementStudio_LOCATION: C:\Users\akorribelly\Downloads\SSMS-Setup-ENU
+    Datadog_MSI_LOCATION: E:\SQLISO\
+    SQLSERVER_EXE_LOCATION: C:\Users\akorribelly\Downloads\SW_DVD9_NTRL_SQL_Svr_Standard_Edtn_2016w_SP2_64Bit_English_OEM_VL_X21-59522.iso
+    SQLSERVER_EXE_LOCATION_Mount: G:\
+    SQLSERVER_CU_LOCATION: C:\Users\akorribelly\Downloads\
+    BACKUPDIR: E:\BACKUP
+    SQLDATADIR: E:\SQLDATA
+    SQLLOGDIR: F:\SQLLOG
+    TEMPDBDIR: E:\SQLDATA
+    TEMPDBLOG: F:\SQLLOG
+    SYSADMINACC: AH-BANR\DB
+    SAPWD: SCrQzEX&#ia4@jV
+    SERVICEACCOUNTFORSQLADMIN: AH-BANR\akorribelly
+    DISKYAMLSRC: /Users/akorribelly/Desktop/Powershell/diskDDyaml/conf.yaml
+    DISKYAMLDEST: C:\ProgramData\Datadog\conf.d\disk.d\
+    PROCESSYAMLSRC: /Users/akorribelly/Desktop/Powershell/ProcessDDyaml/AH-WFS/conf.yaml
+    PROCESSYAMLDEST: C:\ProgramData\Datadog\conf.d\process.d\
+    SQLYAMLSRC: /Users/akorribelly/Desktop/Powershell/sqlserverDDYaml/AH-WFS/conf.yaml
+    SQLYAMLDEST: C:\ProgramData\Datadog\conf.d\sqlserver.d\
+    Domain_ACC: ah-banr\SQL
+    Domain_ACC_Password: tH9thu5RepRuchlBRoxI
+
+
+
+  tasks:
+    - name: Create directory structure
+      win_file:
+        path: "{{ item }}"
+        state: directory
+      with_items:
+          - E:\BACKUP
+          - E:\SQLDATA
+          - F:\SQLLOG
+
+      tags:
+        - Dir_Structures
+
+
+    - name: Copy powershell folder to remote machines
+      win_copy:
+        src: "{{ Source_folder }}"
+        dest: "{{ destination_folder }}"
+      tags:
+        - Foldercopy
+
+    - name: SSMS installation
+      win_command: "{{ ManagementStudio_LOCATION }} /install /quiet /restart"
+      notify: "Restart Servers"
+      tags:
+        - SSMS
+    - name: Ensure DD is installed  via win_command
+      win_command: 'msiexec /qn /i datadog-agent-7-latest.amd64.msi APIKEY="dd605d1d620eb2fb227812efe05cb44d"'
+      args:
+        executable: cmd
+        chdir: '{{ Datadog_MSI_LOCATION }}'
+      tags:
+        - DD
+
+
+    - name: Ensure my SQL ISO is mounted
+      win_disk_image:
+        image_path: '{{ SQLSERVER_EXE_LOCATION }}'
+        state: present
+      register: disk_image_out
+      tags:
+        - mount
+
+
+
+    - name: SQL SERVER INSTALLATION
+
+      win_command: setup.exe /IACCEPTSQLSERVERLICENSETERMS /ACTION="install" /ENU="True" /QUIET="True" /UpdateEnabled="false" /UpdateSource="MU" /HELP="False" /INDICATEPROGRESS="False" /INSTALLSHAREDDIR="C:\Program Files\Microsoft SQL Server"
+        /INSTALLSHAREDWOWDIR="C:\Program Files (x86)\Microsoft SQL Server"
+        /INSTANCEDIR="C:\Program Files\Microsoft SQL Server"
+        /FEATURES=SQLENGINE,REPLICATION,DQC,CONN,BC,SDK /INSTANCENAME=MSSQLSERVER
+        /INSTANCEID="MSSQLSERVER" /SQLSVCACCOUNT="NT Service\MSSQLSERVER"
+        /AGTSVCACCOUNT="NT Service\SQLSERVERAGENT" /AGTSVCSTARTUPTYPE="Automatic"
+        /SQLSVCSTARTUPTYPE="Automatic" /SQLCOLLATION="SQL_Latin1_General_CP1_CI_AS"
+        /SQLSVCACCOUNT="NT Service\MSSQLSERVER" /SQLSYSADMINACCOUNTS="{{ SERVICEACCOUNTFORSQLADMIN }}"
+        /INSTALLSQLDATADIR= "{{ SQLDATADIR }}" /SQLUSERDBLOGDIR="{{ SQLLOGDIR }}" /SECURITYMODE="SQL"
+        /SAPWD="{{ SAPWD }}" /SQLBACKUPDIR="{{ BACKUPDIR }}" /SQLTEMPDBDIR="{{ TEMPDBDIR }}" /SQLTEMPDBLOGDIR="{{ TEMPDBLOG }}"
+        /SQLTEMPDBFILECOUNT="1"
+
+      args:
+        executable: cmd
+        chdir: '{{ SQLSERVER_EXE_LOCATION_Mount }}'
+      ignore_errors: yes
+      notify: "Restart Servers"
+      tags:
+        - SQLSERVER
+
+    - name:  ALL CDO SQLSCRIPTS EXECUTION
+      win_command: sqlcmd -U sa -P "{{ SAPWD }}"  -i "{{ item }}"
+      with_items:
+        - C:\Powershell\CDO_SQLscripts\dbManagement.sql
+        - C:\Powershell\CDO_SQLscripts\GetDatadogMetrics.sql
+        - C:\Powershell\CDO_SQLscripts\UpdateStatistics.sql
+        - C:\Powershell\CDO_SQLscripts\IndexMaintenance.sql
+
+
+      tags:
+        - SQLSCRIPTS
+
+
+    - name: Copy diskyaml file to destination as specified below
+      win_copy:
+        src: "{{ DISKYAMLSRC }}"
+        dest: "{{ DISKYAMLDEST }}"
+      tags:
+        - DDYAML1
+
+    - name: Copy Processddyaml file to destination as specified below
+      win_copy:
+        src: "{{ PROCESSYAMLSRC }}"
+        dest: "{{ PROCESSYAMLDEST }}"
+      tags:
+        - DDYAML2
+    - name: Copy sqlserveryaml file to destination as specified below
+      win_copy:
+        src: "{{ SQLYAMLSRC }}"
+        dest: "{{ SQLYAMLDEST }}"
+      tags:
+        - DDYAML3
+      notify: " Restart DD Agent"
+
+    - name: Installing CU
+      win_command: sqlserver2016-kb4536648-x64.exe /IACCEPTSQLSERVERLICENSETERMS /QUIET="True" /Action="PATCH" /INSTANCEID="MSSQLSERVER"
+      args:
+        executable: cmd
+        chdir: '{{ SQLSERVER_CU_LOCATION }}'
+      ignore_errors: yes
+      notify: "Restart Servers"
+      tags:
+        - CU
+
+    - name: Set the log on user to a domain account for SqlServer service
+      win_service:
+        name: MSSQLSERVER
+        state: restarted
+        username: '{{ Domain_ACC }}'
+        password: '{{ Domain_ACC_Password }}'
+        force_dependent_services: yes
+      tags:
+        - DA1
+
+    - name: Set the log on user to a domain account for SqlAgent service
+      win_service:
+        name: SQLSERVERAGENT
+        state: restarted
+        username: '{{ Domain_ACC }}'
+        password: '{{ Domain_ACC_Password }}'
+        force_dependent_services: yes
+      tags:
+        - DA2
+
+  handlers:
+    - name: reboot servers
+      win_reboot:
+      listen: "Restart Servers"
+    - name: Restart datadog Agent
+      win_shell: Start-Service datadogagent
+      listen: " Restart DD Agent"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
